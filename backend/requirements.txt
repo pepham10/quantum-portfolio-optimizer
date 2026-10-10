@@ -1,0 +1,20 @@
+# Web / API
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+
+# Data
+yfinance
+pandas
+numpy
+
+# Quantum
+qiskit
+qiskit-aer
+qiskit-optimization
+qiskit-algorithms
+
+# Dev
+pytest
+httpx
