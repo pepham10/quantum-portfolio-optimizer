@@ -1,20 +1,25 @@
-# Web / API
-fastapi
-uvicorn[standard]
-pydantic
-pydantic-settings
+# Pinned versions, tested together on Python 3.12 (Qiskit APIs change often).
 
-# Data
-yfinance
-pandas
-numpy
+# Web / API
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.0
+pydantic-settings==2.15.0
+
+# Data + classical optimization
+yfinance==1.7.0
+pandas==3.0.6
+numpy==2.5.4
+scipy==1.18.1
 
 # Quantum
-qiskit
-qiskit-aer
-qiskit-optimization
-qiskit-algorithms
+qiskit==2.5.2
+qiskit-aer==0.17.2
+qiskit-optimization==0.7.0
+qiskit-ibm-runtime==0.50.0   # only for the FakeManilaV2 noise model (no IBM account needed)
+matplotlib==3.11.2           # circuit diagram rendering
+pylatexenc==2.11             # needed by Qiskit's matplotlib circuit drawer
 
 # Dev
-pytest
-httpx
+pytest==9.1.1
+httpx==0.28.1

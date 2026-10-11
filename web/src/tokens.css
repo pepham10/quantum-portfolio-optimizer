@@ -1,0 +1,68 @@
+/* Hallmark · genre: modern-minimal (dark) · macrostructure: Narrative Workflow · theme: custom
+ * vibe: "calm dark lab, plain-language teaching" · paper oklch(17.8% 0.013 271) · accent oklch(75.8% 0.096 200) teal
+ * display + body: Geist · axes: dark / geometric-sans / cool
+ */
+:root {
+  /* surfaces */
+  --color-paper: oklch(17.8% 0.013 271);
+  --color-paper-2: oklch(20.5% 0.017 269); /* panels; also the circuit diagram background */
+  --color-paper-3: oklch(24% 0.02 268);    /* hover / selected */
+  --color-rule: oklch(28.9% 0.023 267);
+  --color-rule-strong: oklch(37.3% 0.029 269);
+
+  /* text */
+  --color-ink: oklch(94% 0.007 269);
+  --color-ink-2: oklch(78.6% 0.019 269);
+  --color-ink-3: oklch(63.7% 0.024 268);
+  --color-on-ink: oklch(17.8% 0.013 271);
+
+  /* accent: one teal, used for selection, focus and the quantum result */
+  --color-accent: oklch(75.8% 0.096 200);
+  --color-focus: oklch(75.8% 0.096 200);
+  --color-good: oklch(78.1% 0.123 156);
+  --color-warn: oklch(80% 0.11 80);
+  --color-error: oklch(69% 0.129 30);
+
+  /* chart series (validated for colour-vision deficiency on this surface) */
+  --color-quantum: oklch(65.9% 0.106 201);
+  --color-noisy: oklch(62.6% 0.173 292);
+  --color-classical: oklch(65.9% 0.136 72);
+  --color-bar: oklch(37.3% 0.029 269);
+  --color-grid: oklch(24% 0.02 268);
+
+  /* circuit gate colours, mirrored in backend CIRCUIT_STYLE */
+  --color-gate-h: oklch(84% 0.06 200);
+  --color-gate-zz: oklch(75.8% 0.096 200);
+  --color-gate-x: oklch(84% 0.08 82);
+
+  /* type */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, Menlo, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
+  --text-display: clamp(2.25rem, 1.4rem + 3.4vw, 3.75rem);
+
+  /* space (4-pt scale) */
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4.5rem;
+  --space-4xl: 6rem;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-pill: 999px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+}
