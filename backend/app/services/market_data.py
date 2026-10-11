@@ -22,6 +22,8 @@ log = logging.getLogger(__name__)
 
 TRADING_DAYS = 252
 CACHE_TTL_SECONDS = 6 * 60 * 60
+NEGATIVE_TTL_SECONDS = 10 * 60  # remember "this symbol does not exist" so we don't re-ask Yahoo
+MIN_HISTORY_DAYS = 120  # trading days of overlapping prices; fewer makes mu and Sigma mostly noise
 FALLBACK_FILE = Path(__file__).resolve().parent.parent / "data" / "fallback_prices.json"
 TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
 
@@ -35,6 +37,10 @@ class TickerNotFoundError(ValueError):
     """Raised when a symbol has no price data from any source."""
 
 
+class DataQualityError(TickerNotFoundError):
+    """Raised when prices exist but are unusable (too short, corrupt). Maps to a 400, like a bad ticker."""
+
+
 @dataclass
 class PriceData:
     prices: pd.DataFrame  # index = date, one column per ticker (adjusted close)
@@ -44,6 +50,8 @@ class PriceData:
 # ticker -> (fetched_at, Series of adjusted closes covering ~2 years)
 _memory_cache: dict[str, tuple[float, pd.Series]] = {}
 _fallback: dict[str, pd.Series] | None = None
+# symbol -> time we learned Yahoo has no data for it (only recorded when the download itself worked)
+_unknown: dict[str, float] = {}
 
 
 def normalize_ticker(symbol: str) -> str:
@@ -101,9 +109,14 @@ def get_prices(tickers: list[str], lookback_days: int = 365) -> PriceData:
             sources.add("cache")
 
     missing = [t for t in tickers if t not in series]
+    known_bad = [t for t in missing if now - _unknown.get(t, 0.0) < NEGATIVE_TTL_SECONDS and t not in _load_fallback()]
+    if known_bad:
+        raise TickerNotFoundError(f"No price data found for: {', '.join(known_bad)}")
+    download_ok = False
     if missing:
         try:
             fetched = _download(missing)
+            download_ok = True
         except Exception as exc:  # network error, rate limit, yfinance breakage...
             log.warning("yfinance download failed: %s", exc)
             fetched = {}
@@ -122,15 +135,23 @@ def get_prices(tickers: list[str], lookback_days: int = 365) -> PriceData:
 
     missing = [t for t in tickers if t not in series]
     if missing:
+        if download_ok:  # Yahoo answered and these symbols are not in it: remember that for a while
+            for t in missing:
+                _unknown[t] = now
         raise TickerNotFoundError(f"No price data found for: {', '.join(missing)}")
 
     prices = pd.DataFrame({t: series[t] for t in tickers})
     # Strip timezones so live and fallback series align on the same dates.
     prices.index = pd.to_datetime(prices.index).tz_localize(None).normalize()
+    # Zero or negative prices are bad data and would make returns infinite or NaN; treat them as missing.
+    prices = prices.where(prices > 0)
     cutoff = prices.index.max() - pd.Timedelta(days=lookback_days)
     prices = prices[prices.index >= cutoff].dropna()
-    if len(prices) < 30:
-        raise TickerNotFoundError("Not enough overlapping price history for these tickers")
+    if len(prices) < MIN_HISTORY_DAYS:
+        raise DataQualityError(
+            f"Not enough overlapping price history: found {len(prices)} trading days, need at least "
+            f"{MIN_HISTORY_DAYS}. A recently listed stock can cause this; try different tickers or a longer lookback."
+        )
 
     # Report the "weakest" source used so the UI can be honest about staleness.
     source = "fallback" if "fallback" in sources else "live" if "live" in sources else "cache"
@@ -154,4 +175,6 @@ def annualized_stats(prices: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
     returns = prices.pct_change().dropna()
     mu = returns.mean().to_numpy() * TRADING_DAYS
     sigma = returns.cov().to_numpy() * TRADING_DAYS
+    if not (np.isfinite(mu).all() and np.isfinite(sigma).all()):
+        raise DataQualityError("The price data for these tickers contains invalid values; try different tickers.")
     return mu, sigma

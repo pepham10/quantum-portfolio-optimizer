@@ -2,20 +2,25 @@ r"""Portfolio selection as a QUBO (Quadratic Unconstrained Binary Optimization).
 
 Decision: one binary variable per stock, x_i = 1 means "hold stock i".
 
-    minimize  f(x) = (1 - s) * x^T S x  -  s * m^T x  +  P * (sum_i x_i - k)^2
-                     \_____ risk _____/   \_ return _/   \____ budget ______/
+    minimize  f(x) = (1 - s)/k^2 * x^T S x  -  s/k * m^T x  +  P * (sum_i x_i - k)^2
+                     \_______ risk _______/   \__ return __/   \____ budget ______/
 
   s  risk slider in [0, 1]. s = 0 cares only about risk, s = 1 only about return.
   S  covariance matrix, divided by its largest absolute entry (so entries are in [-1, 1]).
   m  expected returns, divided by their largest absolute value (also in [-1, 1]).
   k  how many stocks to hold.
+
+Why 1/k^2 and 1/k? Holding k stocks with equal weights w = x / k gives
+w^T S w = x^T S x / k^2 and m^T w = m^T x / k. Weighting the terms this way makes the
+slider mean the same thing as in the continuous (Markowitz) problem for any k; without
+it, risk would count k times more heavily than return as k grows.
   P  penalty weight: a big cost for picking any number of stocks other than k.
 
 Why normalize? Annual variances (~0.05) and returns (~0.3) live on different
 scales; without rescaling, the slider would not move the answer smoothly.
 
 Why is P chosen as it is? Flipping one bit changes the risk + return part by at
-most M = max_i [(1-s) * (S_ii + 2 * sum_{j!=i} |S_ij|) + s * |m_i|]. A bitstring
+most M = max_i [a * (S_ii + 2 * sum_{j!=i} |S_ij|) + b * |m_i|], with a = (1-s)/k^2, b = s/k. A bitstring
 that is d stocks away from k pays d^2 * P >= d * P in penalty, and can be fixed
 with d flips that change the rest by at most d * M. So any P > M guarantees the
 best answer holds exactly k stocks, while keeping P as small as possible
@@ -60,9 +65,10 @@ class Qubo:
     def objective_parts(self, x: np.ndarray) -> dict[str, float]:
         """Split f(x) into its three terms, for explaining the result in the UI."""
         x = np.asarray(x, dtype=float)
+        risk_w, ret_w = term_weights(self.risk, self.k)
         return {
-            "risk_term": float((1 - self.risk) * x @ self.sigma_scaled @ x),
-            "return_term": float(-self.risk * self.mu_scaled @ x),
+            "risk_term": float(risk_w * x @ self.sigma_scaled @ x),
+            "return_term": float(-ret_w * self.mu_scaled @ x),
             "penalty_term": float(self.penalty * (x.sum() - self.k) ** 2),
         }
 
@@ -75,9 +81,15 @@ def scale(mu: np.ndarray, sigma: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return mu / mu_scale, sigma / sigma_scale
 
 
-def penalty_weight(mu_s: np.ndarray, sigma_s: np.ndarray, risk: float) -> float:
+def term_weights(risk: float, k: int) -> tuple[float, float]:
+    """(risk weight, return weight) for equal weights over k stocks: (1-s)/k^2 and s/k."""
+    return (1 - risk) / k**2, risk / k
+
+
+def penalty_weight(mu_s: np.ndarray, sigma_s: np.ndarray, risk: float, k: int) -> float:
+    risk_w, ret_w = term_weights(risk, k)
     off_diag = np.abs(sigma_s).sum(axis=1) - np.abs(np.diag(sigma_s))
-    per_flip = (1 - risk) * (np.diag(sigma_s) + 2 * off_diag) + risk * np.abs(mu_s)
+    per_flip = risk_w * (np.diag(sigma_s) + 2 * off_diag) + ret_w * np.abs(mu_s)
     return 1.1 * float(per_flip.max()) + 0.1
 
 
@@ -89,14 +101,15 @@ def build_qubo(mu: np.ndarray, sigma: np.ndarray, risk: float, k: int) -> Qubo:
         raise ValueError("k must be between 1 and n - 1")
 
     mu_s, sigma_s = scale(mu, sigma)
-    P = penalty_weight(mu_s, sigma_s, risk)
+    risk_w, ret_w = term_weights(risk, k)
+    P = penalty_weight(mu_s, sigma_s, risk, k)
 
     # Expand P * (sum x - k)^2 using x_i^2 = x_i for binary variables:
     #   = P * [ sum_{i != j} x_i x_j  +  (1 - 2k) * sum_i x_i  +  k^2 ]
     # Diagonal entries of Q act as linear terms because x_i^2 = x_i.
-    Q = (1 - risk) * sigma_s.copy()
+    Q = risk_w * sigma_s.copy()
     Q += P * (np.ones((n, n)) - np.eye(n))
-    Q[np.diag_indices(n)] += -risk * mu_s + P * (1 - 2 * k)
+    Q[np.diag_indices(n)] += -ret_w * mu_s + P * (1 - 2 * k)
     constant = P * k * k
 
     return Qubo(Q=Q, constant=constant, penalty=P, k=k,

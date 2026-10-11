@@ -13,7 +13,7 @@ Pick 3–5 stocks and a risk level. The app turns "which *k* stocks should I hol
 
 ## Quick start
 
-Prerequisites: **Python 3.12** (3.10–3.12 work; brand-new Python versions often lack `qiskit-aer` wheels), **Node.js 20+**, and `make` (optional). No API keys, accounts or database.
+Prerequisites: **Python 3.10 or newer**, **Node.js 20+**, and `make` (optional, and usually missing on Windows; use the manual steps below there). No API keys, accounts or database.
 
 ```bash
 make setup      # creates backend/.venv, installs Python + npm packages
@@ -28,7 +28,7 @@ make test       # backend tests + frontend production build
 ```bash
 # backend
 cd backend
-python3.12 -m venv .venv
+python3 -m venv .venv              # Windows: python -m venv .venv
 source .venv/bin/activate          # Git Bash on Windows: source .venv/Scripts/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
@@ -41,6 +41,14 @@ npm run dev
 </details>
 
 The web dev server forwards `/api/*` to the backend on port 8000, so no CORS setup is needed. To point the frontend somewhere else, set `VITE_API_URL`.
+
+**Try it on your phone** (same Wi-Fi as your computer): start the backend as above, then run the web app with the `--host` flag so it is reachable on your network:
+
+```bash
+npm --prefix web run dev -- --host     # or: cd web && npm run dev -- --host
+```
+
+Vite prints a `Network:` address (like `http://192.168.x.x:5173`). Open it in your phone's browser. The phone only talks to the web server, which forwards API calls to the backend on your computer, so you do not need to expose the backend itself. If the page does not load, allow Node through your firewall when prompted.
 
 The first request after a cold start takes a few seconds (Qiskit import, price download, one-time matplotlib font cache). After that, a run takes under 1 second.
 
@@ -96,13 +104,14 @@ From roughly one year of daily adjusted closing prices we compute daily returns,
 One binary variable per stock: `xᵢ = 1` means "hold stock *i*".
 
 ```
-minimize   (1 − s) · xᵀΣx   −   s · μᵀx   +   P · (Σᵢ xᵢ − k)²
-            └── risk ──┘      └ return ┘      └── hold exactly k ──┘
+minimize   (1 − s)/k² · xᵀΣx   −   s/k · μᵀx   +   P · (Σᵢ xᵢ − k)²
+            └──── risk ────┘      └ return ┘      └── hold exactly k ──┘
 ```
 
 - `s` is the risk slider: 0 = only minimize risk, 1 = only maximize return.
+- The `1/k²` and `1/k` come from splitting the money evenly over the `k` chosen stocks (`w = x/k`): risk is `wᵀΣw = xᵀΣx/k²` and return is `μᵀw = μᵀx/k`. This keeps the slider meaning the same thing as in the classical (Markowitz) problem for every `k`.
 - μ and Σ are each divided by their largest absolute entry, so both terms live on the same scale and the slider behaves smoothly.
-- `P` is the smallest penalty that is provably large enough: flipping one bit changes the risk+return part by at most `M`, so any `P > M` guarantees the best answer holds exactly `k` stocks. A bigger `P` would drown out the finance signal. Details are in [backend/app/services/qubo.py](backend/app/services/qubo.py).
+- `P` is the smallest penalty that is provably large enough: flipping one bit changes the risk+return part by at most `M` (computed with the `1/k²` and `1/k` weights), so any `P > M` guarantees the best answer holds exactly `k` stocks. A bigger `P` would drown out the finance signal. Details are in [backend/app/services/qubo.py](backend/app/services/qubo.py).
 
 ### 3. QUBO → qubits
 Substituting `xᵢ = (1 − Zᵢ)/2` turns the cost into an **Ising Hamiltonian** made of `Zᵢ` and `ZᵢZⱼ` terms (qiskit-optimization does the algebra). Low energy means a good portfolio.
@@ -188,4 +197,4 @@ mobile/                          original Expo starter (unused; the demo uses we
 cd backend && .venv/bin/python -m pytest -q
 ```
 
-Covers: the QUBO matrix equals the written formula; the penalty always forces exactly *k* stocks (checked on 135 random instances); brute force is truly minimal; the Ising Hamiltonian ranks bitstrings identically to the QUBO; the readable circuit is identical to Qiskit's `qaoa_ansatz` (fidelity 1); QAOA beats random guessing and finds the optimum; noise adds gates and lowers P(optimum); Markowitz and frontier sanity checks; API validation and errors; offline fallback.
+Covers: bad or too-short price data, the result cache, and safe error messages; the QUBO matrix equals the written formula, and its pick matches the best equal-weight portfolio; the penalty always forces exactly *k* stocks (checked on 135 random instances); brute force is truly minimal; the Ising Hamiltonian ranks bitstrings identically to the QUBO; the readable circuit is identical to Qiskit's `qaoa_ansatz` (fidelity 1); QAOA beats random guessing and finds the optimum; noise adds gates and lowers P(optimum); Markowitz and frontier sanity checks; API validation and errors; offline fallback.

@@ -110,5 +110,7 @@ Response (abridged):
 
 Errors:
 - 422: invalid input (risk out of range, 3-5 tickers, duplicates, bad k/reps). Automatic from FastAPI.
-- 400: ticker not found or no price data.
-- 500: solver failed.
+- 400: ticker not found, no price data, corrupt prices, or fewer than 120 trading days of shared history (e.g. a recently listed stock).
+- 500: unexpected solver failure (the message is generic; details are in the server log).
+
+Identical requests are answered from a short-lived (10 minute) cache, and at most 2 optimizations run at once.

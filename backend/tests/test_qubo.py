@@ -11,7 +11,7 @@ from tests.conftest import random_instance
 def direct_objective(x, mu, sigma, risk, k, P):
     """The formula from the docstring, written out literally."""
     m, S = scale(mu, sigma)
-    return (1 - risk) * x @ S @ x - risk * m @ x + P * (x.sum() - k) ** 2
+    return (1 - risk) / k**2 * x @ S @ x - risk / k * m @ x + P * (x.sum() - k) ** 2
 
 
 def test_qubo_matrix_matches_formula(instance):

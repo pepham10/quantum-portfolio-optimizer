@@ -1,7 +1,7 @@
 # Quick commands. Run `make setup` once, then `make backend` and `make web`
 # in two terminals. Raw commands are in the README if you don't have make.
 
-PYTHON ?= python3.12
+PYTHON ?= python3
 VENV   := backend/.venv
 BIN    := $(VENV)/bin
 
