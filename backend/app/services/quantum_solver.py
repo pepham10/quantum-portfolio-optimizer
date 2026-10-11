@@ -33,6 +33,7 @@ is visible.
 from __future__ import annotations
 
 import io
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -229,6 +230,14 @@ CIRCUIT_STYLE = {
 }
 
 
+def sanitize_svg(svg: str) -> str:
+    """Strip anything executable from SVG text. Qiskit's drawer should never emit any, but the page
+    inserts this markup as HTML, so we guarantee it: no <script>, no on...= handlers, no javascript: links."""
+    svg = re.sub(r"<script.*?</script\s*>", "", svg, flags=re.IGNORECASE | re.DOTALL)
+    svg = re.sub(r"\son\w+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)", "", svg, flags=re.IGNORECASE)
+    return re.sub(r"javascript\s*:", "", svg, flags=re.IGNORECASE)
+
+
 def draw_circuit_svg(hamiltonian: SparsePauliOp, reps: int, labels: list[str]) -> str:
     import matplotlib
 
@@ -241,7 +250,7 @@ def draw_circuit_svg(hamiltonian: SparsePauliOp, reps: int, labels: list[str]) -
     buf = io.StringIO()
     fig.savefig(buf, format="svg", bbox_inches="tight", facecolor=CIRCUIT_STYLE["backgroundcolor"])
     plt.close(fig)
-    return buf.getvalue()
+    return sanitize_svg(buf.getvalue())
 
 
 def run_qaoa(

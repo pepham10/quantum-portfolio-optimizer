@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api")
 
 # A run is CPU-heavy (about 2 s here), so at most MAX_PARALLEL run at once; the rest wait their turn.
 MAX_PARALLEL = 2
+WAIT_SECONDS = 45  # how long a request may wait for a free slot before we answer 503
 _slots = threading.BoundedSemaphore(MAX_PARALLEL)
 
 # Same request -> same answer (the QAOA seed is fixed), so remember recent results for a few minutes.
@@ -63,13 +64,19 @@ def optimize_portfolio(req: OptimizeRequest):
     if cached is not None:
         return cached
     try:
-        with _slots:
+        if not _slots.acquire(timeout=WAIT_SECONDS):
+            raise HTTPException(status_code=503, detail="The optimizer is busy. Please try again in a moment.")
+        try:
             cached = _cache_get(key)  # another request may have finished this exact run while we waited
             if cached is not None:
                 return cached
             result = optimize(req)
+        finally:
+            _slots.release()
         _cache_put(key, result)
         return result
+    except HTTPException:
+        raise
     except TickerNotFoundError as exc:  # also covers DataQualityError
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:

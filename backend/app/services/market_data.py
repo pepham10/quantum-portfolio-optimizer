@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 TRADING_DAYS = 252
 CACHE_TTL_SECONDS = 6 * 60 * 60
 NEGATIVE_TTL_SECONDS = 10 * 60  # remember "this symbol does not exist" so we don't re-ask Yahoo
+MAX_CACHED_SYMBOLS = 300  # cap each in-memory cache so odd traffic cannot grow memory without limit
 MIN_HISTORY_DAYS = 120  # trading days of overlapping prices; fewer makes mu and Sigma mostly noise
 FALLBACK_FILE = Path(__file__).resolve().parent.parent / "data" / "fallback_prices.json"
 TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
@@ -54,10 +55,16 @@ _fallback: dict[str, pd.Series] | None = None
 _unknown: dict[str, float] = {}
 
 
+def _trim(cache: dict) -> None:
+    """Drop the oldest entries once a cache holds more than MAX_CACHED_SYMBOLS."""
+    while len(cache) > MAX_CACHED_SYMBOLS:
+        cache.pop(next(iter(cache)))  # dicts keep insertion order, so this is the oldest
+
+
 def normalize_ticker(symbol: str) -> str:
     sym = symbol.strip().upper()
     if not TICKER_RE.match(sym):
-        raise TickerNotFoundError(f"'{symbol}' is not a valid ticker symbol")
+        raise TickerNotFoundError(f"'{symbol[:12]}' is not a valid ticker symbol")
     return sym
 
 
@@ -122,6 +129,7 @@ def get_prices(tickers: list[str], lookback_days: int = 365) -> PriceData:
             fetched = {}
         for t, s in fetched.items():
             _memory_cache[t] = (now, s)
+            _trim(_memory_cache)
             series[t] = s
             sources.add("live")
 
@@ -138,6 +146,7 @@ def get_prices(tickers: list[str], lookback_days: int = 365) -> PriceData:
         if download_ok:  # Yahoo answered and these symbols are not in it: remember that for a while
             for t in missing:
                 _unknown[t] = now
+            _trim(_unknown)
         raise TickerNotFoundError(f"No price data found for: {', '.join(missing)}")
 
     prices = pd.DataFrame({t: series[t] for t in tickers})

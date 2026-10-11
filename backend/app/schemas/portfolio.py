@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import Annotated
+
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 
 DISCLAIMER = (
     "Educational demo only. Uses past prices, and past performance does not predict "
@@ -9,7 +11,7 @@ DISCLAIMER = (
 
 
 class OptimizeRequest(BaseModel):
-    tickers: list[str] = Field(..., min_length=3, max_length=5, examples=[["NVDA", "AAPL", "MSFT", "TSLA"]])
+    tickers: list[Annotated[str, StringConstraints(max_length=12)]] = Field(..., min_length=3, max_length=5, examples=[["NVDA", "AAPL", "MSFT", "TSLA"]])
     risk: float = Field(0.5, ge=0, le=1, description="0 = capital preservation, 1 = maximum growth")
     k: int | None = Field(None, ge=1, le=4, description="Stocks to hold. Default: half the tickers, rounded")
     reps: int = Field(2, ge=1, le=3, description="QAOA layers")

@@ -191,6 +191,17 @@ docs/api-contract.md             request/response shapes
 mobile/                          original Expo starter (unused; the demo uses web/)
 ```
 
+## Security notes
+
+This is a local, stateless demo (no accounts, no database, no secrets), so the surface is small. What is in place:
+
+- **Input limits:** 3–5 tickers of at most 12 characters, matched against a strict ticker pattern; numeric fields have fixed ranges; request bodies over 16 KB are refused (413).
+- **Abuse limits:** at most 2 optimizations run at once, a waiting request gets a clean 503 after 45 s, identical requests are cached for 10 minutes, and the in-memory caches are size-capped.
+- **Errors:** unexpected failures return a generic message; details stay in the server log.
+- **Browser protections:** CORS only allows the local web app by default (`ALLOWED_ORIGINS` in `backend/.env`), plus `nosniff`, `X-Frame-Options: DENY`, `no-referrer` and `no-store` headers on API responses. The circuit diagram SVG is sanitized on the server before the page inserts it.
+- **Network:** `uvicorn` binds to `localhost` by default. For phone testing, use `npm run dev -- --host` (the web server forwards API calls), not `--host 0.0.0.0` on the backend.
+- **Dependencies:** pinned in `backend/requirements.txt`; `pip-audit` and `npm audit` report no known vulnerabilities.
+
 ## Tests
 
 ```bash
