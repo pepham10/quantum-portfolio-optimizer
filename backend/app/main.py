@@ -1,7 +1,12 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.portfolio import router as portfolio_router
 from app.core.config import settings
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="Quantum Portfolio Optimizer")
 
@@ -12,6 +17,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(portfolio_router)
 
 
 @app.get("/api/health")
