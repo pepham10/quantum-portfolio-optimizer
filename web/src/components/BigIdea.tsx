@@ -77,8 +77,8 @@ export function BigIdea() {
           <Bars heights={TILTED} highlight={TOP} caption="After interference" />
           <h3>2. Interference</h3>
           <p>
-            The circuit then raises the chance of good portfolios and lowers the chance of bad ones. How it does that is
-            explained just below.
+            The qubits then go through a series of steps, called a <strong>circuit</strong>. These steps raise the
+            chances of good portfolios and lower the chances of bad ones.
           </p>
         </div>
         <div className="idea">

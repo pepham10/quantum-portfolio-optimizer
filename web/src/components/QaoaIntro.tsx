@@ -2,7 +2,7 @@ const WORDS = [
   { letter: 'Q', word: 'Quantum', text: 'Runs on qubits, using superposition and interference.' },
   { letter: 'A', word: 'Approximate', text: 'Aims for a very good answer, not a guaranteed perfect one.' },
   { letter: 'O', word: 'Optimization', text: 'Built for "find the best combination" problems: yes/no choices plus a score.' },
-  { letter: 'A', word: 'Algorithm', text: 'A recipe: build a circuit, run it, let a normal computer tune it, repeat.' },
+  { letter: 'A', word: 'Algorithm', text: 'A recipe: build a quantum program (a “circuit”), run it, let a normal computer tune it, repeat.' },
 ]
 
 export function QaoaIntro() {
