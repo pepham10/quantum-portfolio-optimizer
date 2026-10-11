@@ -1,27 +1,30 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { OptimizeResponse } from '../types'
 import { label, pct } from '../format'
 
-interface BarDatum {
+interface Row {
+  key: string
   name: string
-  values: number[] // one per series, already in 0..1 of the chart's max
+  value: number // 0..1 of the chart's max
   display: string
-  best?: boolean
+  top?: boolean
 }
 
-function Bars({ rows, series, guess }: { rows: BarDatum[]; series: ('primary' | 'noisy')[]; guess?: number }) {
+function Bars({ rows, guess, animate = false }: { rows: Row[]; guess?: number; animate?: boolean }) {
   return (
-    <div className={`bars ${series.length > 1 ? 'paired' : ''}`}>
+    <div className="bars">
       {rows.map((row) => (
-        <div className={`bar-row ${row.best ? 'best' : ''}`} key={row.name}>
+        <div className={`bar-row ${row.top ? 'best' : ''}`} key={row.key}>
           <span className="name" title={row.name}>
             {row.name}
-            {row.best && <span className="tag">best</span>}
+            {row.top && <span className="tag">top score</span>}
           </span>
           <span className="bar-track">
-            {row.values.map((v, i) => (
-              <span key={i} className={`bar-fill ${series[i]}`} style={{ width: `${Math.max(v, 0.005) * 100}%` }} />
-            ))}
+            {animate ? (
+              <span className="bar-fill primary scale" style={{ transform: `scaleX(${row.value})` }} />
+            ) : (
+              <span className="bar-fill primary" style={{ width: `${Math.max(row.value, 0.005) * 100}%` }} />
+            )}
             {guess !== undefined && <span className="guess-line" style={{ left: `${guess * 100}%` }} aria-hidden />}
           </span>
           <span className="val">{row.display}</span>
@@ -31,66 +34,45 @@ function Bars({ rows, series, guess }: { rows: BarDatum[]; series: ('primary' | 
   )
 }
 
-/** Valid portfolios (exactly k stocks) by measured probability, plus one row for everything else. */
-function outcomeRows(r: OptimizeResponse, withNoise: boolean) {
-  const { ideal, noisy, shots } = r.qaoa
-  const best = r.brute_force.bitstring
-  const prob = (counts: Record<string, number>, b: string) => (counts[b] ?? 0) / shots
-  const valid = r.brute_force.ranking.filter((b) => b.valid)
-  const sorted = [...valid].sort((a, b) => prob(ideal.counts, b.bitstring) - prob(ideal.counts, a.bitstring)).slice(0, 6)
-  const wrongIdeal = 1 - ideal.valid_fraction
-  const wrongNoisy = noisy ? 1 - noisy.valid_fraction : 0
-  const max = Math.max(
-    wrongIdeal, wrongNoisy,
-    ...sorted.map((b) => prob(ideal.counts, b.bitstring)),
-    ...(noisy ? sorted.map((b) => prob(noisy.counts, b.bitstring)) : []),
-  )
-  const rows: BarDatum[] = sorted.map((b) => {
-    const pi = prob(ideal.counts, b.bitstring)
-    const pn = noisy ? prob(noisy.counts, b.bitstring) : 0
-    return {
-      name: label(b.bitstring, r.tickers),
-      values: withNoise ? [pi / max, pn / max] : [pi / max],
-      display: withNoise ? `${pct(pi)} → ${pct(pn)}` : pct(pi),
-      best: b.bitstring === best,
-    }
-  })
-  rows.push({
-    name: `Not ${r.k} stocks`,
-    values: withNoise ? [wrongIdeal / max, wrongNoisy / max] : [wrongIdeal / max],
-    display: withNoise ? `${pct(wrongIdeal)} → ${pct(wrongNoisy)}` : pct(wrongIdeal),
-  })
-  return { rows, guess: r.qaoa.random_guess_prob / max }
+/** Valid portfolios (exactly k stocks) plus one row for all the rule-breakers, from a {bitstring: chance} map. */
+function chanceRows(r: OptimizeResponse, chances: Record<string, number>, max: number, sortByChance: boolean): Row[] {
+  const top = r.brute_force.bitstring
+  let valid = r.brute_force.ranking.filter((b) => b.valid)
+  if (sortByChance) valid = [...valid].sort((a, b) => (chances[b.bitstring] ?? 0) - (chances[a.bitstring] ?? 0))
+  const wrong = Object.entries(chances).filter(([b]) => b.split('1').length - 1 !== r.k).reduce((a, [, p]) => a + p, 0)
+  return [
+    ...valid.slice(0, 6).map((b) => {
+      const p = chances[b.bitstring] ?? 0
+      return { key: b.bitstring, name: label(b.bitstring, r.tickers), value: p / max, display: pct(p), top: b.bitstring === top }
+    }),
+    { key: 'wrong', name: `Not ${r.k} stocks`, value: wrong / max, display: pct(wrong) },
+  ]
 }
 
 function StepScore({ r }: { r: OptimizeResponse }) {
   const valid = r.brute_force.ranking.filter((b) => b.valid)
-  const bestCost = valid[0].cost
-  const worstCost = valid[valid.length - 1].cost
-  const span = worstCost - bestCost || 1
-  const total = 2 ** r.tickers.length
-  const rows: BarDatum[] = valid.slice(0, 8).map((b, i) => ({
+  const best = valid[0].cost
+  const worst = valid[valid.length - 1].cost
+  const span = worst - best || 1
+  const rows: Row[] = valid.slice(0, 8).map((b, i) => ({
+    key: b.bitstring,
     name: label(b.bitstring, r.tickers),
-    values: [0.08 + 0.92 * ((worstCost - b.cost) / span)],
+    value: 0.08 + 0.92 * ((worst - b.cost) / span),
     display: `#${i + 1}`,
-    best: i === 0,
+    top: i === 0,
   }))
-
   return (
     <>
-      <h3>Give every possible choice a score</h3>
+      <h3>Score every portfolio</h3>
       <p className="lead">
-        First, the question becomes a scoring rule. A group of stocks scores well if it has <strong>grown in the past
-        year</strong> and scores badly if its price <strong>swings a lot</strong>. Your risk setting decides which of
-        the two matters more. Any group that doesn't hold exactly {r.k} stocks gets a big penalty.
-      </p>
-      <p className="lead">
-        With {r.tickers.length} stocks there are only {total} possible choices, so an ordinary computer can score them
-        all instantly. That gives us an answer key to check the quantum result against.
+        A portfolio scores well if its stocks <strong>grew last year</strong> and badly if their prices{' '}
+        <strong>swing a lot</strong>; your risk setting sets the balance. Portfolios without exactly {r.k} stocks get a
+        penalty. The winner, the <strong>top-scoring portfolio</strong>, is what QAOA should find. A normal computer can
+        check all {2 ** r.tickers.length} here, which gives us the answer key.
       </p>
       <div className="step-visual">
-        <div className="bar-legend"><span>Groups of {r.k}, ranked by score (longer bar = better)</span></div>
-        <Bars rows={rows} series={['primary']} />
+        <div className="bar-legend"><span>Portfolios of {r.k} stocks, ranked by score</span></div>
+        <Bars rows={rows} />
       </div>
     </>
   )
@@ -99,25 +81,56 @@ function StepScore({ r }: { r: OptimizeResponse }) {
 function StepCircuit({ r }: { r: OptimizeResponse }) {
   return (
     <>
-      <h3>Turn the stocks into qubits</h3>
+      <h3>Build the circuit</h3>
       <p className="lead">
-        Each stock gets one <strong>qubit</strong>. An ordinary bit is 0 or 1; a qubit can be in a mix of both at once,
-        called <strong>superposition</strong>. That lets the circuit hold all {2 ** r.tickers.length} choices at the
-        same time.
-      </p>
-      <p className="lead">
-        The circuit then repeats a simple pattern ({r.reps} {r.reps === 1 ? 'time' : 'times'} here) that makes
-        high-scoring choices more likely and low-scoring ones less likely. A regular computer tunes the pattern's
-        settings until the results stop improving.
+        Your real circuit, drawn by Qiskit: <strong>start</strong>, then {r.reps} {r.reps === 1 ? 'layer' : 'layers'} of{' '}
+        <strong>score</strong> (turn arrows) and <strong>mix</strong> (combine arrows), then measure. The numbers on the
+        gates come from your stocks and risk setting.
       </p>
       <div className="step-visual">
         {/* SVG rendered by Qiskit on our own backend */}
         <div className="circuit" role="img" aria-label="Quantum circuit diagram" dangerouslySetInnerHTML={{ __html: r.qaoa.circuit_svg }} />
-        <div className="circuit-legend">
-          <div><b><span className="swatch h" />Start</b>Puts every qubit in superposition, so all choices are equally likely.</div>
-          <div><b><span className="swatch zz" />Score</b>Links pairs of stocks, using how they move together and the "hold {r.k}" rule.</div>
-          <div><b><span className="swatch x" />Mix</b>Lets the choices interfere, so good ones add up and bad ones cancel out.</div>
+      </div>
+    </>
+  )
+}
+
+function StepChances({ r }: { r: OptimizeResponse }) {
+  const stages = r.qaoa.evolution
+  const [stage, setStage] = useState(stages.length - 1)
+  const [playing, setPlaying] = useState(false)
+  const isPlaying = playing && stage < stages.length - 1
+  useEffect(() => {
+    if (!isPlaying) return
+    const id = setTimeout(() => setStage((s) => s + 1), 1100)
+    return () => clearTimeout(id)
+  }, [isPlaying, stage])
+
+  const top = r.brute_force.bitstring
+  const max = Math.max(...stages.flatMap((st) => chanceRows(r, st, 1, false).map((x) => x.value)))
+  const rows = chanceRows(r, stages[stage], max, false)
+  const names = ['Start', ...Array.from({ length: stages.length - 1 }, (_, i) => `After layer ${i + 1}`)]
+
+  return (
+    <>
+      <h3>Watch the chances change</h3>
+      <p className="lead">
+        The real chances inside your circuit, layer by layer. They start equal; each layer of turning and mixing shifts
+        them. The top-scoring portfolio goes from <strong>{pct(stages[0][top] ?? 0, 1)}</strong> to{' '}
+        <strong>{pct(stages[stages.length - 1][top] ?? 0, 1)}</strong>.
+      </p>
+      <div className="step-visual">
+        <div className="stage-controls">
+          <button className="btn-secondary" onClick={() => { setStage(0); setPlaying(true) }} disabled={isPlaying}>
+            {isPlaying ? 'Playing…' : 'Play'}
+          </button>
+          <div className="seg" role="group" aria-label="Circuit stage">
+            {names.map((nm, i) => (
+              <button key={nm} aria-pressed={stage === i} onClick={() => { setPlaying(false); setStage(i) }}>{nm}</button>
+            ))}
+          </div>
         </div>
+        <Bars rows={rows} animate />
       </div>
     </>
   )
@@ -125,70 +138,43 @@ function StepCircuit({ r }: { r: OptimizeResponse }) {
 
 function StepMeasure({ r }: { r: OptimizeResponse }) {
   const q = r.qaoa.ideal
-  const { rows, guess } = outcomeRows(r, false)
+  const n = 2 ** r.tickers.length
+  const shots = r.qaoa.shots
+  const chances = Object.fromEntries(Object.entries(q.counts).map(([b, c]) => [b, c / shots]))
+  const all = chanceRows(r, chances, 1, true)
+  const max = Math.max(r.qaoa.random_guess_prob, ...all.map((x) => x.value))
+  const rows = all.map((x) => ({ ...x, value: x.value / max }))
   return (
     <>
       <h3>Measure, many times</h3>
       <p className="lead">
-        Looking at a qubit forces it to pick 0 or 1, so each run of the circuit gives one choice of stocks. We ran it
-        {' '}{r.qaoa.shots.toLocaleString()} times and counted the results.
-      </p>
-      <p className="lead">
-        The best choice came up in <strong>{pct(q.prob_optimal)}</strong> of runs, about{' '}
-        <strong>{q.amplification.toFixed(1)}× more often</strong> than random guessing. The algorithm improved the
-        odds, but didn't make the best answer certain. That's typical for small circuits.
+        Each run gives one portfolio, e.g. <span className="ket-inline">{q.bitstring}</span> ={' '}
+        {label(q.bitstring, r.tickers)}. Over {shots.toLocaleString()} runs the top-scoring portfolio came out{' '}
+        <strong>{pct(q.prob_optimal)}</strong> of the time. Picking one of the {n} portfolios at random would get it{' '}
+        {pct(r.qaoa.random_guess_prob)} of the time.
       </p>
       {q.most_likely_bitstring !== r.brute_force.bitstring && (
         <p className="lead">
-          The most common result was {label(q.most_likely_bitstring, r.tickers)}. We still report{' '}
-          {label(q.bitstring, r.tickers)} because every result can be scored instantly, so we keep the best one we saw.
+          The most common result was {label(q.most_likely_bitstring, r.tickers)}; we report the highest-scoring portfolio
+          seen, since each can be scored instantly.
         </p>
       )}
       <div className="step-visual">
         <div className="bar-legend">
-          <span><i style={{ background: 'var(--color-quantum)' }} />Best choice</span>
-          <span><i style={{ background: 'var(--color-bar)' }} />Other choices</span>
-          <span><i className="dash" />Random guess ({pct(r.qaoa.random_guess_prob)})</span>
+          <span>How often each portfolio came out</span>
+          <span><i className="dash" />Random pick ({pct(r.qaoa.random_guess_prob)})</span>
         </div>
-        <Bars rows={rows} series={['primary']} guess={guess} />
-      </div>
-    </>
-  )
-}
-
-function StepNoise({ r }: { r: OptimizeResponse }) {
-  const { ideal, noisy } = r.qaoa
-  if (!noisy) return <p className="lead">The noisy run was skipped for this request.</p>
-  const { rows, guess } = outcomeRows(r, true)
-  return (
-    <>
-      <h3>Add real-world noise</h3>
-      <p className="lead">
-        Real quantum chips make small mistakes, and they can only connect neighbouring qubits, which adds extra steps.
-        We ran the same circuit on a simulated IBM chip with realistic errors.
-      </p>
-      <p className="lead">
-        The extra steps went from {ideal.two_qubit_gates} to {noisy.two_qubit_gates} two-qubit operations, and the best
-        choice dropped from <strong>{pct(ideal.prob_optimal)}</strong> to <strong>{pct(noisy.prob_optimal)}</strong> of
-        runs. Noise blurs the answer, which is one reason today's quantum computers are still limited.
-      </p>
-      <div className="step-visual">
-        <div className="bar-legend">
-          <span><i style={{ background: 'var(--color-quantum)' }} />Perfect simulator</span>
-          <span><i style={{ background: 'var(--color-noisy)' }} />Noisy chip</span>
-          <span><i className="dash" />Random guess</span>
-        </div>
-        <Bars rows={rows} series={['primary', 'noisy']} guess={guess} />
+        <Bars rows={rows} guess={r.qaoa.random_guess_prob / max} />
       </div>
     </>
   )
 }
 
 const STEPS: { title: string; render: (r: OptimizeResponse) => ReactNode }[] = [
-  { title: 'Score every choice', render: (r) => <StepScore r={r} /> },
-  { title: 'Turn stocks into qubits', render: (r) => <StepCircuit r={r} /> },
+  { title: 'Score every portfolio', render: (r) => <StepScore r={r} /> },
+  { title: 'Build the circuit', render: (r) => <StepCircuit r={r} /> },
+  { title: 'Watch the chances change', render: (r) => <StepChances r={r} /> },
   { title: 'Measure many times', render: (r) => <StepMeasure r={r} /> },
-  { title: 'Add real-world noise', render: (r) => <StepNoise r={r} /> },
 ]
 
 export function Walkthrough({ r }: { r: OptimizeResponse }) {
@@ -196,8 +182,8 @@ export function Walkthrough({ r }: { r: OptimizeResponse }) {
   return (
     <section className="section" aria-labelledby="how-title">
       <div className="section-head">
-        <h2 id="how-title">How it got there</h2>
-        <p>Four steps, from a question about stocks to an answer from a (simulated) quantum computer.</p>
+        <h2 id="how-title">What just happened</h2>
+        <p>The same ideas, applied to your stocks, in four steps.</p>
       </div>
       <div className="walk">
         <ol className="steps">
@@ -214,10 +200,8 @@ export function Walkthrough({ r }: { r: OptimizeResponse }) {
           {STEPS[step].render(r)}
           <div className="step-nav">
             <button className="btn-secondary" disabled={step === 0} onClick={() => setStep(step - 1)}>Back</button>
-            {step < STEPS.length - 1 ? (
+            {step < STEPS.length - 1 && (
               <button className="btn-secondary" onClick={() => setStep(step + 1)}>Next step</button>
-            ) : (
-              <a className="btn-secondary" href="#compare">Compare with classical</a>
             )}
           </div>
         </div>

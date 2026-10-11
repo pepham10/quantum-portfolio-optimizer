@@ -19,7 +19,7 @@ export function Comparison({ r }: { r: OptimizeResponse }) {
     Object.entries(w).filter(([, v]) => v > 0.005).map(([t, v]) => `${t} ${pct(v)}`).join(' · ')
 
   const stocks: Point[] = r.assets.map((a) => ({ volatility: a.volatility, expected_return: a.expected_return, label: a.ticker }))
-  const quantum: Point[] = [{ volatility: r.quantum.volatility, expected_return: r.quantum.expected_return, label: 'Quantum pick' }]
+  const quantum: Point[] = [{ volatility: r.quantum.volatility, expected_return: r.quantum.expected_return, label: 'QAOA pick, money split evenly' }]
   const classical: Point[] = [{ volatility: r.classical.volatility, expected_return: r.classical.expected_return, label: 'Classical mix' }]
   const all = [...stocks, ...quantum, ...classical, ...r.frontier.map((f) => ({ ...f, label: '' }))]
   const step = 0.1
@@ -34,7 +34,7 @@ export function Comparison({ r }: { r: OptimizeResponse }) {
     <section className="section" id="compare" aria-labelledby="compare-title">
       <div className="section-head">
         <h2 id="compare-title">Quantum vs. classical</h2>
-        <p>The same question, answered three ways. At this size, the classical methods are faster and just as good.</p>
+        <p>The same question, three ways. At this size, the classical methods are faster and just as good.</p>
       </div>
 
       <div className="compare">
@@ -46,13 +46,13 @@ export function Comparison({ r }: { r: OptimizeResponse }) {
         </div>
         <div>
           <h3><span className="dot check" />Check every option</h3>
-          <p className="what">Scores all {2 ** r.tickers.length} choices with an ordinary computer. Always exact.</p>
+          <p className="what">Scores all {2 ** r.tickers.length} portfolios with an ordinary computer. Always exact.</p>
           <p className="pick-line">{joinNames(r.brute_force.tickers)}</p>
           <p className="time">{duration(r.brute_force.runtime_ms)}</p>
         </div>
         <div>
           <h3><span className="dot classical" />Classical portfolio math</h3>
-          <p className="what">The standard finance method. Can spread money across any of the stocks.</p>
+          <p className="what">The standard finance method. Answers a different question: how much money to put in each stock.</p>
           <p className="pick-line">{weights(r.classical.weights)}</p>
           <p className="time">{duration(r.classical.runtime_ms)}</p>
         </div>
@@ -100,9 +100,9 @@ export function Comparison({ r }: { r: OptimizeResponse }) {
             single stocks.
           </p>
           <p>
-            The line shows the best possible mixes: the most growth you could get for each level of risk. See where the
-            quantum pick (<span style={{ color: 'var(--color-quantum)' }}>teal</span>) and the classical mix
-            (<span style={{ color: 'var(--color-classical)' }}>amber</span>) land compared with it.
+            The line shows the best possible mixes: the most growth you could get for each level of risk. The QAOA pick
+            (<span style={{ color: 'var(--color-quantum)' }}>teal</span>, money split evenly) and the classical mix
+            (<span style={{ color: 'var(--color-classical)' }}>amber</span>) show where each answer lands.
           </p>
           <p className="muted">Based on the past year's prices. Past growth doesn't predict future returns.</p>
         </div>

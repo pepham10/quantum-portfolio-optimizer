@@ -1,4 +1,4 @@
-# QAOA Portfolio Lab
+# Quantum Portfolio Lab
 
 **An interactive explainer for QAOA (Quantum Approximate Optimization Algorithm), built around a real finance problem: choosing which stocks to hold.**
 Built for the qollab.xyz hackathon, theme **Quantum Unlocked**.
@@ -48,17 +48,19 @@ The first request after a cold start takes a few seconds (Qiskit import, price d
 
 ## What the app shows
 
-The page is written for someone who has never heard of QAOA. It runs once on load with four default stocks, so there is always something to look at.
+The page is written for a curious person who has never heard of QAOA. It teaches the idea first, ties it to a real problem they can play with, then shows why it matters. One term is used throughout: a **portfolio** is a group of stocks you hold (4 stocks → 16 possible portfolios, written as bits like `1100`).
 
-1. **Setup.** Pick 3–5 stocks and a risk level (safer ↔ more growth). "Stocks to hold" and "circuit layers" sit under *Advanced options*.
-2. **Result.** One sentence: *"Hold NVDA and AAPL"*, whether that matches the exact best answer, how often the quantum computer produced it compared with random guessing, and the suggested money split.
-3. **How it got there.** A four-step walkthrough, with Back/Next buttons and one simple visual per step:
-   1. *Score every choice*: the scoring rule in plain words, and every valid group ranked.
-   2. *Turn stocks into qubits*: the Qiskit circuit, with a three-item legend (start, score, mix).
-   3. *Measure many times*: how often each group came out of 2,048 runs, with a random-guess marker.
-   4. *Add real-world noise*: the same bars from a perfect simulator and a noisy IBM chip model, side by side.
-4. **Quantum vs. classical.** The quantum pick, the exact check-every-option answer and classical portfolio math (Markowitz) side by side with their run times, plus a risk-vs-return chart with the efficient frontier.
-5. **Honest note.** "Is this a quantum advantage? No, and that's the point."
+1. **Small choices, enormous numbers.** A calculator with two presets, *your choice* (follows the form) and *50 of the S&P 500* (a 70-digit number). It ends by naming QAOA.
+2. **So what is QAOA?** Quantum · Approximate · Optimization · Algorithm, who proposed it, and a one-sentence definition.
+3. **How a quantum computer finds good answers.** Superposition, interference and measurement, illustrated with 8 labelled portfolios (`000`–`111`). Interference is explained with **arrows**: the score step turns each portfolio's arrow by its score (which alone changes nothing), and the mix step combines arrows of portfolios one stock apart, so arrows that point the same way add up and opposite ones cancel. Measurement is explained concretely: a 30% chance means about 30 of every 100 runs. A "who does what" box: the quantum computer runs the circuit; a normal computer only picks the settings and adjusts them (hence "hybrid").
+4. **What is a quantum circuit?** A labelled 3-stock circuit (start → score → mix → measure) with a caption per step.
+5. **Try it on real stocks**, then the result: QAOA's pick as qubits, what "top-scoring" means, and how often it came out vs a random pick.
+6. **What if you had invested a year ago?** Growth of an editable amount (default $100,000) for QAOA's pick (split evenly), the classical mix and all your stocks. Labelled clearly as hindsight: the pick used these same prices.
+7. **What just happened.** Four short steps: score every portfolio → build the circuit → watch the chances change (real per-layer probabilities, with Play) → measure many times.
+8. **More layers, more noise.** 1, 2 and 3 layers on a perfect simulator vs a noisy IBM chip model, with chip operation counts.
+9. **Your turn: beat the optimizer.** Two dial sliders (score, mix) for a one-layer circuit; the chance of every portfolio updates instantly (all settings are simulated exactly in advance), with "now / your best / optimizer" scores. A button reveals the full map of settings with your position and the optimizer's.
+10. **Quantum vs. classical.** Side by side, plus a risk-vs-return chart.
+11. **Why QAOA is exciting.** Three reasons; *Picture a world where it works* (personalised treatment combinations, new materials, self-replanning cities, renewable grids, instant airline recovery, molecule design), labelled as possibilities, not promises; the same recipe written out for finance, delivery, energy, scheduling and networks; and what has to happen first.
 
 ---
 
@@ -125,7 +127,7 @@ The trained circuit, with the **same angles**, is also run on `AerSimulator.from
 - **Brute force** over all 2ⁿ bitstrings of the same QUBO: the exact optimum (the answer key).
 - **Markowitz** mean-variance with continuous long-only weights (scipy SLSQP), using the same risk/return trade-off but without the "exactly *k*" rule.
 - **Efficient frontier**: the minimum-volatility portfolio for each target return.
-- **Hybrid step**: after QAOA picks *which* stocks, Markowitz decides *how much* of each.
+- QAOA only decides *which* stocks to hold. Splitting the money is a separate continuous problem that classical solvers handle well, so the UI does not present a split; the risk/return chart plots QAOA's pick with the money split evenly.
 
 ---
 
@@ -142,14 +144,15 @@ The trained circuit, with the **same angles**, is also run on `AerSimulator.from
 
 ## Demo script (about 3 minutes)
 
-1. **Hook (15 s).** "Fund managers often must hold exactly *k* assets. That makes portfolio choice a discrete puzzle, the kind of problem quantum computers are hoped to help with. Let's see how QAOA, the best-known quantum algorithm for this, actually works."
-2. **Setup (20 s).** Select NVDA, AAPL, MSFT, TSLA. Risk 0.5, hold 2, p=2. Press **Run QAOA**.
-3. **Chapter 01 (30 s).** "Each stock is a qubit; 1 = buy. QAOA picked these two, and it matches the brute-force optimum. But notice: the quantum computer gives *odds*, not an answer. The best portfolio came up X× more often than random guessing."
-4. **Chapter 02 (25 s).** Point at the coloured formula. "Risk, return, and a penalty for not holding exactly two. This cost becomes the energy of the circuit."
-5. **Chapter 03 (25 s).** "Hadamards make every portfolio possible at once. Pink RZZ gates encode how stocks move together; yellow RX gates make the possibilities interfere. A classical optimizer tunes γ and β: that's the hybrid loop."
-6. **Chapter 04 (35 s).** Show the histogram, then click **Compare**. "Same circuit, same angles, on a noisy model of a real IBM chip. The device can't connect every qubit, so the compiler adds swaps, roughly 4× the two-qubit gates, and the peak flattens."
-7. **Chapter 05 (20 s).** "Markowitz, the classical standard, lands right next to our hybrid answer, in a millisecond."
-8. **Close (15 s).** "So: no quantum advantage here, and we say that plainly. What you've seen is exactly how QAOA works, its real limits today, and why people are still studying it." Optionally drag risk to 0 then 1 and re-run to show the pick moving from steady stocks to fast growers.
+1. **Hook (20 s).** *Small choices, enormous numbers*: "2 of 4 stocks: 6 options. 50 of the S&P 500: a 70-digit number. Nobody checks everything. One promising quantum strategy is called QAOA."
+2. **What QAOA is (15 s).** Read the four letters.
+3. **The idea (40 s).** "A portfolio is a group of stocks; with 3 stocks there are 8. A quantum computer holds all 8 at once. Each has an arrow: the score step turns arrows, the mix step combines them, and arrows that line up make a portfolio more likely. The quantum computer does that; a normal computer just tunes the settings."
+4. **Real stocks (20 s).** Change a stock or the risk slider and press **Run**. Point at the qubits: 1 = buy, 0 = skip.
+5. **The $100k chart (15 s).** "In hindsight, $100k in QAOA's pick a year ago would be worth this. Hindsight only, since it used the same prices."
+6. **Inside the circuit (20 s).** *What just happened* → step 3 → **Play**: the real chances changing layer by layer.
+7. **Noise (15 s).** "More layers help a perfect machine and hurt a real one."
+8. **Your turn (25 s).** Turn the dials, find a bright spot, then **Reveal the map**. "That trial and error is the normal computer's job."
+9. **Close (20 s).** *Picture a world where it works*: "At this size a laptop wins, and we say so. If the hardware gets there, this recipe could re-plan cities, grids and airlines."
 
 **Backup:** if the venue Wi-Fi is down, the 12 popular tickers still work from the bundled snapshot (the UI shows "offline snapshot"). Run `make refresh-data` the night before to update it.
 

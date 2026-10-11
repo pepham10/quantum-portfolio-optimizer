@@ -112,11 +112,37 @@ class QaoaResult(BaseModel):
     circuit_svg: str
     training_ms: float
     hamiltonian: list[dict]
+    evolution: list[dict[str, float]]  # exact probabilities at start and after each layer
+    layer1_params: dict[str, float]    # optimizer's 1-layer setting (beta, gamma)
+    layer_study: list[dict]            # per layer count: ideal/noisy odds and chip operation count
+
+
+class Landscape(BaseModel):
+    """1-layer QAOA results over a grid of the two circuit settings (for the "tune the dials" view).
+
+    probs[i][j] lists the probability of each portfolio in `order` (valid portfolios,
+    best first) for betas[i] and gammas[j]; its last entry is the total for all
+    portfolios that break the "hold k" rule.
+    """
+
+    betas: list[float]
+    gammas: list[float]
+    order: list[str]
+    probs: list[list[list[float]]]
 
 
 class FrontierPoint(BaseModel):
     volatility: float
     expected_return: float
+
+
+class Backtest(BaseModel):
+    """Growth of 1.0 invested at the start of the price window (hindsight, not a forecast)."""
+
+    dates: list[str]
+    qaoa: list[float]       # QAOA's picks, money split evenly
+    all_equal: list[float]  # every selected ticker, money split evenly
+    markowitz: list[float]  # classical mean-variance mix
 
 
 class OptimizeResponse(BaseModel):
@@ -129,9 +155,11 @@ class OptimizeResponse(BaseModel):
     qubo: QuboInfo
     qaoa: QaoaResult
     brute_force: BruteForceResult
-    quantum: WeightedPortfolio    # hybrid: classical weights among QAOA's chosen stocks
+    quantum: WeightedPortfolio    # QAOA's chosen stocks with the money split evenly (QAOA only picks *which*)
     classical: WeightedPortfolio  # Markowitz over all tickers (no "exactly k" rule)
     frontier: list[FrontierPoint]
+    landscape: Landscape
+    backtest: Backtest
     disclaimer: str = DISCLAIMER
 
 

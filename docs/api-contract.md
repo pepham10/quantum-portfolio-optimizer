@@ -64,7 +64,16 @@ Response (abridged):
     "history": [ ... ],              // optimizer objective per step
     "circuit_svg": "<?xml ...",      // textbook QAOA circuit, dark theme
     "training_ms": 250,
-    "hamiltonian": [{ "pauli": "ZZII", "coeff": 1.0 }]
+    "hamiltonian": [{ "pauli": "ZZII", "coeff": 1.0 }],
+    "evolution": [                   // exact odds of every bitstring: start, after layer 1, ...
+      { "0000": 0.0625, "0001": 0.0625, ... },
+      { "0000": 0.01, "1100": 0.18, ... }
+    ],
+    "layer1_params": { "beta": 0.65, "gamma": 5.37 },  // optimizer's 1-layer setting
+    "layer_study": [                 // 1, 2 and 3 layers, each trained on its own
+      { "layers": 1, "ideal": { "1100": 0.22, ... }, "noisy": { "1100": 0.17, ... },
+        "chip_two_qubit_gates": 24, "chip_depth": 55 }
+    ]
   },
 
   "brute_force": {
@@ -75,12 +84,26 @@ Response (abridged):
     ]
   },
 
-  // Hybrid: classical weights among the stocks QAOA picked (ideal run)
-  "quantum":   { "weights": { "NVDA": 0, "AAPL": 0.55, "MSFT": 0, "TSLA": 0.45 },
+  // QAOA's picked stocks with the money split evenly (QAOA decides which, not how much); used for the chart
+  "quantum":   { "weights": { "NVDA": 0, "AAPL": 0.5, "MSFT": 0, "TSLA": 0.5 },
                  "expected_return": 0.18, "volatility": 0.22, "runtime_ms": 300 },
   // Markowitz mean-variance over all tickers (no "exactly k" rule)
   "classical": { "weights": { ... }, "expected_return": 0.19, "volatility": 0.21, "runtime_ms": 5 },
   "frontier": [{ "volatility": 0.18, "expected_return": 0.12 }],
+  // 1-layer odds over a 20 x 28 grid of the two circuit settings ("tune the dials" view)
+  "landscape": {
+    "betas": [0.0, 0.157, ...],      // mixing dial, 0..π
+    "gammas": [0.0, 0.224, ...],     // scoring dial, 0..2π
+    "order": ["1100", "0110", ...],  // valid portfolios, best first
+    "probs": [[[0.06, 0.06, ..., 0.62]]]  // probs[i][j] follows `order`; last = all rule-breakers
+  },
+  // Hindsight: growth of 1.0 invested on the first day of the price window, sampled every 5 trading days
+  "backtest": {
+    "dates": ["2025-10-09", "2025-10-16", ...],
+    "qaoa": [1.0, 1.02, ...],        // QAOA's picks, money split evenly
+    "all_equal": [1.0, 0.99, ...],   // every selected ticker, split evenly
+    "markowitz": [1.0, 1.01, ...]    // classical mean-variance mix
+  },
   "disclaimer": "Educational demo only. ..."
 }
 ```

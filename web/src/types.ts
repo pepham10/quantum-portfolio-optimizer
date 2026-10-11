@@ -68,10 +68,24 @@ export interface OptimizeResponse {
     circuit_svg: string
     training_ms: number
     hamiltonian: { pauli: string; coeff: number }[]
+    evolution: Record<string, number>[] // exact odds at the start and after each layer
+    layer1_params: { beta: number; gamma: number }
+    /** 1, 2 and 3 layers, each trained on its own: exact ideal odds, sampled noisy odds, chip operation count. */
+    layer_study: {
+      layers: number
+      ideal: Record<string, number>
+      noisy?: Record<string, number>
+      chip_two_qubit_gates?: number
+      chip_depth?: number
+    }[]
   }
   brute_force: { bitstring: string; tickers: string[]; cost: number; runtime_ms: number; ranking: RankedBitstring[] }
   quantum: WeightedPortfolio
   classical: WeightedPortfolio
   frontier: { volatility: number; expected_return: number }[]
+  /** 1-layer odds over a grid of the two circuit dials; probs[i][j] follows `order`, last entry = rule-breakers. */
+  landscape: { betas: number[]; gammas: number[]; order: string[]; probs: number[][][] }
+  /** Growth of 1.0 invested on the first day (hindsight: picks used these same prices). */
+  backtest: { dates: string[]; qaoa: number[]; all_equal: number[]; markowitz: number[] }
   disclaimer: string
 }

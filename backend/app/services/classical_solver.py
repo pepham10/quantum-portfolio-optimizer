@@ -106,3 +106,18 @@ def efficient_frontier(mu: np.ndarray, sigma: np.ndarray, points: int = 30) -> l
         ret, vol = portfolio_stats(w, mu, sigma)
         frontier.append({"volatility": vol, "expected_return": ret})
     return frontier
+
+
+def growth_curve(prices, weights: np.ndarray, every: int = 5) -> tuple[list[str], list[float]]:
+    """Value of 1.0 invested at the first date with these weights (bought once, then held).
+
+    Sampled every `every` trading days (plus the last day) to keep the response small.
+    """
+    w = np.asarray(weights, dtype=float)
+    rel = prices.to_numpy() / prices.to_numpy()[0]  # each stock's price relative to day one
+    value = rel @ w
+    idx = list(range(0, len(value), every))
+    if idx[-1] != len(value) - 1:
+        idx.append(len(value) - 1)
+    dates = [prices.index[i].date().isoformat() for i in idx]
+    return dates, [round(float(value[i]), 5) for i in idx]

@@ -54,6 +54,13 @@ def test_optimize_full_response():
     assert sum(body["quantum"]["weights"].values()) == pytest.approx(1, abs=1e-3)
     assert sum(body["classical"]["weights"].values()) == pytest.approx(1, abs=1e-3)
     assert len(body["frontier"]) > 5
+    land = body["landscape"]
+    assert len(land["probs"]) == len(land["betas"]) and len(land["probs"][0]) == len(land["gammas"])
+    assert len(land["order"]) == 6 and land["order"][0] == bf["bitstring"]
+    assert abs(sum(land["probs"][3][7]) - 1) < 1e-3
+    assert len(qaoa["evolution"]) == body["reps"] + 1
+    bt = body["backtest"]
+    assert bt["qaoa"][0] == pytest.approx(1) and len(bt["dates"]) == len(bt["markowitz"]) == len(bt["all_equal"])
     assert body["data"]["source"] == "fallback"
     assert "Not financial advice" in body["disclaimer"]
 

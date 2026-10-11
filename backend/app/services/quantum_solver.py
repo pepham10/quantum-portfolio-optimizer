@@ -47,6 +47,7 @@ from scipy.optimize import minimize
 
 from app.services.qubo import Qubo, all_bitstrings, from_bitstring, to_bitstring, to_quadratic_program
 
+MAX_LAYERS = 3  # always trained up to here, so the app can compare 1, 2 and 3 layers
 NOISY_DEVICE = "FakeManilaV2"  # snapshot of a retired 5-qubit IBM device: noise rates + wiring
 TWO_QUBIT_GATES = ("cx", "ecr", "cz", "swap", "rzz")
 
@@ -76,6 +77,14 @@ class QaoaResult:
     shots: int
     training_ms: float
     hamiltonian: list[dict] = field(default_factory=list)
+    # For teaching: exact probabilities of every bitstring (stock order) at the
+    # start and after each layer, using the trained angles.
+    evolution: list[dict[str, float]] = field(default_factory=list)
+    # The 1-layer angles the optimizer settled on before adding more layers.
+    layer1_params: dict[str, float] = field(default_factory=dict)
+    # "More layers or fewer?": for 1..MAX_LAYERS layers, each trained on its own,
+    # the exact ideal odds, sampled noisy-chip odds, and the chip's operation count.
+    layer_study: list[dict] = field(default_factory=list)
 
 
 def build_hamiltonian(qubo: Qubo) -> tuple[SparsePauliOp, float]:
@@ -133,6 +142,33 @@ def _interp(angles: np.ndarray) -> np.ndarray:
     padded = np.concatenate([[0.0], angles, [0.0]])
     i = np.arange(1, p + 2)
     return (i - 1) / p * padded[i - 1] + (p - i + 1) / p * padded[i]
+
+
+def one_layer_landscape(
+    hamiltonian: SparsePauliOp, betas: np.ndarray, gammas: np.ndarray
+) -> np.ndarray:
+    """Exact 1-layer QAOA probabilities for every (beta, gamma) pair, in plain numpy.
+
+    Returns an array of shape (len(betas), len(gammas), 2^n) indexed like
+    Statevector.probabilities(). The math, written out:
+      |+>^n                      equal superposition (amplitude 1/sqrt(2^n) each)
+      exp(-i gamma H)            H is diagonal, so each bitstring just gets a phase
+      exp(-i beta X) per qubit   the mixer, the 2x2 matrix [[cos, -i sin], [-i sin, cos]]
+    Doing it by hand (instead of ~500 separate circuit simulations) keeps it fast.
+    """
+    n = hamiltonian.num_qubits
+    energies = np.real(np.diag(hamiltonian.to_matrix()))  # one energy per bitstring
+    psi = np.exp(-1j * gammas[:, None] * energies[None, :]) / np.sqrt(2**n)  # (G, 2^n)
+    psi = np.broadcast_to(psi, (len(betas), *psi.shape)).copy()  # (B, G, 2^n)
+    c = np.cos(betas)[:, None, None, None]
+    s = (-1j * np.sin(betas))[:, None, None, None]
+    for q in range(n):
+        # Split the index into (high bits, qubit q, low bits) and mix qubit q's pair.
+        view = psi.reshape(len(betas), len(gammas), 2 ** (n - 1 - q), 2, 2**q)
+        a0, a1 = view[..., 0, :].copy(), view[..., 1, :].copy()
+        view[..., 0, :] = c * a0 + s * a1
+        view[..., 1, :] = s * a0 + c * a1
+    return np.abs(psi) ** 2
 
 
 def textbook_circuit(
@@ -274,8 +310,10 @@ def run_qaoa(
     grid_scores = np.array([expected_cost(ansatz, x) for x in grid])
     history.append(float(grid_scores.min()))
     params = min((polish(ansatz, grid[i]) for i in np.argsort(grid_scores)[:3]), key=lambda r: r.fun).x
+    layer1 = params.copy()
+    trained = {1: params.copy()}
 
-    for layers in range(2, reps + 1):
+    for layers in range(2, MAX_LAYERS + 1):
         # Step B: grow to one more layer. Two candidate starting points:
         #  - INTERP (Zhou et al., 2020): stretch the angle schedule onto one more layer
         #  - previous angles plus an "off" layer (beta = gamma = 0), which reproduces
@@ -288,7 +326,9 @@ def run_qaoa(
         ]
         start = min(candidates, key=lambda x: expected_cost(ansatz, x))
         params = polish(ansatz, start).x
+        trained[layers] = params.copy()
 
+    params = trained[reps]
     training_ms = (time.perf_counter() - t0) * 1000
 
     def final_run(device: Device) -> Run:
@@ -312,9 +352,37 @@ def run_qaoa(
             runtime_ms=(time.perf_counter() - t) * 1000,
         )
 
+    def stock_order_probs(probs: np.ndarray) -> dict[str, float]:
+        return {format(i, f"0{n}b")[::-1]: float(p) for i, p in enumerate(probs)}
+
+    # Probabilities after 0, 1, ..., reps layers. The first l layers of the trained
+    # circuit are exactly a reps=l circuit with the first l betas and gammas.
+    evolution = [stock_order_probs(np.full(2**n, 1 / 2**n))]
+    for layers in range(1, reps + 1):
+        partial = np.concatenate([params[:layers], params[reps : reps + layers]])
+        state = Statevector(qaoa_ansatz(hamiltonian, reps=layers).assign_parameters(partial))
+        evolution.append(stock_order_probs(state.probabilities()))
+
+    noisy_device = Device(noisy=True, seed=seed) if with_noise else None
+    layer_study = []
+    for layers, angles in trained.items():
+        exact = Statevector(qaoa_ansatz(hamiltonian, reps=layers).assign_parameters(angles)).probabilities()
+        entry = {"layers": layers, "ideal": stock_order_probs(exact)}
+        if noisy_device:
+            compiled = noisy_device.compile(hamiltonian, layers)
+            raw = noisy_device.sample(compiled, angles[None, :], 2048)[0]
+            entry["noisy"] = {b[::-1]: v / 2048 for b, v in raw.items()}
+            ops = compiled.count_ops()
+            entry["chip_two_qubit_gates"] = int(sum(v for g, v in ops.items() if g in TWO_QUBIT_GATES))
+            entry["chip_depth"] = compiled.depth()
+        layer_study.append(entry)
+
     return QaoaResult(
+        layer_study=layer_study,
+        evolution=evolution,
+        layer1_params={"beta": float(layer1[0]), "gamma": float(layer1[1])},
         ideal=final_run(ideal),
-        noisy=final_run(Device(noisy=True, seed=seed)) if with_noise else None,
+        noisy=final_run(noisy_device) if noisy_device else None,
         optimal_params={
             "beta": [float(x) for x in params[:reps]],
             "gamma": [float(x) for x in params[reps:]],

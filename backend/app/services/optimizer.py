@@ -10,7 +10,7 @@ import numpy as np
 from app.schemas.portfolio import OptimizeRequest, OptimizeResponse
 from app.services import classical_solver as cs
 from app.services.market_data import annualized_stats, get_prices
-from app.services.quantum_solver import run_qaoa
+from app.services.quantum_solver import build_hamiltonian, one_layer_landscape, run_qaoa
 from app.services.qubo import build_qubo, from_bitstring
 
 
@@ -24,6 +24,18 @@ def _weighted(weights: np.ndarray, tickers, mu, sigma, runtime_ms: float) -> dic
         "weights": {t: round(float(w), 4) for t, w in zip(tickers, weights)},
         "expected_return": ret, "volatility": vol, "runtime_ms": runtime_ms,
     }
+
+
+def _backtest(prices, qaoa_w: np.ndarray, markowitz_w: np.ndarray) -> dict:
+    """Hindsight check: growth of 1.0 invested on the first day of the price window.
+
+    The picks were made using these same prices, so this is NOT a forecast.
+    """
+    n = prices.shape[1]
+    dates, qaoa = cs.growth_curve(prices, qaoa_w)
+    _, equal = cs.growth_curve(prices, np.full(n, 1 / n))
+    _, markowitz = cs.growth_curve(prices, markowitz_w)
+    return {"dates": dates, "qaoa": qaoa, "all_equal": equal, "markowitz": markowitz}
 
 
 def optimize(req: OptimizeRequest) -> OptimizeResponse:
@@ -65,15 +77,26 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
             "runtime_ms": run.runtime_ms,
         }
 
-    # Hybrid step: QAOA chose *which* stocks; a classical solver chooses *how much*.
+    # "Tune the dials" grid: 1-layer probabilities for valid portfolios (best first)
+    # plus one bucket for everything that breaks the "hold k" rule.
+    betas = np.linspace(0, np.pi, 20, endpoint=False)
+    gammas = np.linspace(0, 2 * np.pi, 28, endpoint=False)
+    grid = one_layer_landscape(build_hamiltonian(qubo)[0], betas, gammas)
+    valid_order = [b for b, _ in ranking if b.count("1") == k]
+    index = [int(b[::-1], 2) for b in valid_order]  # stock-order bitstring -> Qiskit index
+    valid_probs = grid[..., index]
+    other = 1 - valid_probs.sum(axis=-1, keepdims=True)
+    landscape = {
+        "betas": betas.round(4).tolist(),
+        "gammas": gammas.round(4).tolist(),
+        "order": valid_order,
+        "probs": np.concatenate([valid_probs, other], axis=-1).round(4).tolist(),
+    }
+
+    # QAOA answers "which stocks?", not "how much of each?". For the risk/return
+    # chart we simply split the money evenly across the chosen stocks.
     selected = from_bitstring(q.ideal.best_bitstring).astype(bool)
-    t0 = time.perf_counter()
-    full_w = np.zeros(n)
-    if selected.sum() == 1:
-        full_w[selected] = 1.0
-    else:
-        full_w[selected] = cs.markowitz_weights(mu[selected], sigma[np.ix_(selected, selected)], req.risk)
-    hybrid_ms = (time.perf_counter() - t0) * 1000
+    full_w = selected / selected.sum()
 
     t0 = time.perf_counter()
     mk_w = cs.markowitz_weights(mu, sigma, req.risk)
@@ -106,6 +129,13 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
             "circuit_svg": q.circuit_svg,
             "training_ms": q.training_ms,
             "hamiltonian": q.hamiltonian,
+            "evolution": [{b: round(p, 5) for b, p in stage.items()} for stage in q.evolution],
+            "layer1_params": q.layer1_params,
+            "layer_study": [
+                {**e, "ideal": {b: round(p, 5) for b, p in e["ideal"].items()},
+                 **({"noisy": {b: round(p, 5) for b, p in e["noisy"].items()}} if "noisy" in e else {})}
+                for e in q.layer_study
+            ],
         },
         brute_force={
             "bitstring": bf.bitstring, "tickers": _tickers_for(bf.bitstring, tickers),
@@ -116,7 +146,9 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
                 for b, c in ranking
             ],
         },
-        quantum=_weighted(full_w, tickers, mu, sigma, q.training_ms + q.ideal.runtime_ms + hybrid_ms),
+        quantum=_weighted(full_w, tickers, mu, sigma, q.training_ms + q.ideal.runtime_ms),
         classical=_weighted(mk_w, tickers, mu, sigma, mk_ms),
         frontier=cs.efficient_frontier(mu, sigma),
+        landscape=landscape,
+        backtest=_backtest(data.prices, full_w, mk_w),
     )

@@ -114,27 +114,24 @@ export function Controls({ popular, settings, onChange, onRun, running }: Props)
         />
         <div className="range-ends"><span>Safer</span><span>More growth</span></div>
 
-        <details className="advanced">
-          <summary>Advanced options</summary>
-          <div className="advanced-body">
-            <div>
-              <div className="field-label"><span>Stocks to hold</span></div>
-              <div className="seg" role="group" aria-label="Stocks to hold">
-                {[1, 2, 3, 4].filter((v) => v < Math.max(n, 2)).map((v) => (
-                  <button key={v} aria-pressed={k === v} onClick={() => onChange({ ...settings, k: v })}>{v}</button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="field-label"><span>Circuit layers</span></div>
-              <div className="seg" role="group" aria-label="Circuit layers">
-                {[1, 2, 3].map((v) => (
-                  <button key={v} aria-pressed={reps === v} onClick={() => onChange({ ...settings, reps: v })}>{v}</button>
-                ))}
-              </div>
+        <div className="options-row">
+          <div>
+            <div className="field-label"><span>Stocks to hold</span></div>
+            <div className="seg" role="group" aria-label="Stocks to hold">
+              {[1, 2, 3, 4].filter((v) => v < Math.max(n, 2)).map((v) => (
+                <button key={v} aria-pressed={k === v} onClick={() => onChange({ ...settings, k: v })}>{v}</button>
+              ))}
             </div>
           </div>
-        </details>
+          <div>
+            <div className="field-label"><span>Circuit layers</span></div>
+            <div className="seg" role="group" aria-label="Circuit layers">
+              {[1, 2, 3].map((v) => (
+                <button key={v} aria-pressed={reps === v} onClick={() => onChange({ ...settings, reps: v })}>{v}</button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="run-col">

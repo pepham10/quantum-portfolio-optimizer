@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.services.classical_solver import efficient_frontier, markowitz_weights, portfolio_stats
+from app.services.classical_solver import efficient_frontier, growth_curve, markowitz_weights, portfolio_stats
 from app.services.market_data import annualized_stats
 
 
@@ -43,3 +43,12 @@ def test_frontier_is_monotonic(instance):
     vols = [p["volatility"] for p in f]
     assert rets == sorted(rets)
     assert all(v2 >= v1 - 1e-4 for v1, v2 in zip(vols, vols[1:]))
+
+
+def test_growth_curve_buy_and_hold():
+    dates = pd.bdate_range("2026-01-01", periods=11)
+    prices = pd.DataFrame({"A": np.linspace(100, 200, 11), "B": np.full(11, 50.0)}, index=dates)
+    d, v = growth_curve(prices, np.array([0.5, 0.5]), every=5)
+    assert d[0] == "2026-01-01" and len(d) == 3  # days 0, 5, 10
+    assert v[0] == pytest.approx(1.0)
+    assert v[-1] == pytest.approx(0.5 * 2 + 0.5 * 1)  # A doubled, B flat

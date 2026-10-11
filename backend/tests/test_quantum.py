@@ -5,7 +5,7 @@ from qiskit.quantum_info import Statevector
 
 from app.services.classical_solver import brute_force
 from app.services.qubo import all_bitstrings, build_qubo, to_bitstring
-from app.services.quantum_solver import _interp, build_hamiltonian, run_qaoa, textbook_circuit
+from app.services.quantum_solver import _interp, build_hamiltonian, one_layer_landscape, run_qaoa, textbook_circuit
 from tests.conftest import random_instance
 
 
@@ -86,3 +86,41 @@ def test_circuit_svg_renders():
     mu, sigma = random_instance(3, seed=0)
     res = run_qaoa(build_qubo(mu, sigma, 0.5, 1), reps=1, labels=["NVDA", "AAPL", "MSFT"], with_noise=False)
     assert res.circuit_svg.lstrip().startswith("<?xml") and "NVDA" in res.circuit_svg
+
+
+def test_one_layer_landscape_matches_qiskit():
+    mu, sigma = random_instance(4, seed=5)
+    H, _ = build_hamiltonian(build_qubo(mu, sigma, risk=0.6, k=2))
+    betas, gammas = np.array([0.0, 0.4, 2.2]), np.array([0.3, 1.7, 4.0, 5.9])
+    grid = one_layer_landscape(H, betas, gammas)
+    for i, b in enumerate(betas):
+        for j, g in enumerate(gammas):
+            ref = Statevector(qaoa_ansatz(H, reps=1).assign_parameters([b, g])).probabilities()
+            assert np.allclose(grid[i, j], ref, atol=1e-12)
+
+
+def test_evolution_starts_uniform_and_ends_at_trained_state():
+    mu, sigma = random_instance(4, seed=2)
+    q = build_qubo(mu, sigma, risk=0.5, k=2)
+    res = run_qaoa(q, reps=2, draw=False, with_noise=False)
+    assert len(res.evolution) == 3
+    assert all(abs(p - 1 / 16) < 1e-12 for p in res.evolution[0].values())
+    for stage in res.evolution:
+        assert abs(sum(stage.values()) - 1) < 1e-9
+    # The final stage is the trained circuit, whose samples we measured.
+    final = res.evolution[-1]
+    most_likely = max(final, key=final.get)
+    assert res.ideal.counts.get(most_likely, 0) > 0
+
+
+def test_layer_study_compares_one_to_three_layers():
+    mu, sigma = random_instance(4, seed=1)
+    res = run_qaoa(build_qubo(mu, sigma, risk=0.5, k=2), reps=1, draw=False)
+    study = res.layer_study
+    assert [e["layers"] for e in study] == [1, 2, 3]
+    for e in study:
+        assert abs(sum(e["ideal"].values()) - 1) < 1e-9
+        assert abs(sum(e["noisy"].values()) - 1) < 1e-9
+    # Every extra layer means more operations on the real chip.
+    gates = [e["chip_two_qubit_gates"] for e in study]
+    assert gates == sorted(gates) and gates[0] < gates[-1]
