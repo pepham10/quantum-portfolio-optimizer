@@ -78,13 +78,11 @@ export default function App() {
 
       <section className="intro">
         <h1>How a quantum computer hunts for the best choice</h1>
-        <div>
-          <p>
+        <p>
             Some decisions have more options than any computer could ever check. See how one quantum algorithm takes them
             on, then run it yourself on real stocks.
-          </p>
-          <p className="fineprint">Educational demo using past prices. Not financial advice.</p>
-        </div>
+        </p>
+        <p className="fineprint">Educational demo using past prices. Not financial advice.</p>
       </section>
 
       <WhyHard settings={settings} />
