@@ -1,9 +1,12 @@
 import logging
+import threading
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes import portfolio as portfolio_routes
 from app.api.routes.portfolio import router as portfolio_router
 from app.core.config import settings
 
@@ -14,7 +17,14 @@ for _noisy in ("qiskit", "matplotlib", "httpx", "httpcore", "yfinance", "urllib3
 
 MAX_BODY_BYTES = 16 * 1024  # a valid request is a few hundred bytes; refuse anything much bigger
 
-app = FastAPI(title="Quantum Portfolio Optimizer")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    if settings.warmup:  # in a background thread, so the server accepts requests immediately
+        threading.Thread(target=portfolio_routes.warm_up, daemon=True, name="warm-up").start()
+    yield
+
+
+app = FastAPI(title="Quantum Portfolio Optimizer", lifespan=lifespan)
 
 origins = [o.strip() for o in settings.allowed_origins.split(",")]
 app.add_middleware(

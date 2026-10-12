@@ -70,7 +70,9 @@ def optimize_portfolio(req: OptimizeRequest):
             cached = _cache_get(key)  # another request may have finished this exact run while we waited
             if cached is not None:
                 return cached
+            started = time.time()
             result = optimize(req)
+            log.info("optimized %s (k=%s, reps=%d) in %.1fs", ",".join(req.tickers), result.k, req.reps, time.time() - started)
         finally:
             _slots.release()
         _cache_put(key, result)
@@ -82,3 +84,18 @@ def optimize_portfolio(req: OptimizeRequest):
     except Exception as exc:
         log.exception("optimization failed")  # details stay in the server log, not in the response
         raise HTTPException(status_code=500, detail="The optimizer hit an unexpected error. Please try again.") from exc
+
+
+def warm_up() -> None:
+    """Run one default optimization in the background at startup.
+
+    The very first run pays a one-time cost (library imports, font and circuit caches, price download),
+    about 3 seconds extra. Doing it here means the first click in the app is as fast as the rest, and
+    the result lands in the cache in case the app's default settings are the first request.
+    """
+    try:
+        started = time.time()
+        optimize_portfolio(OptimizeRequest(tickers=["NVDA", "AAPL", "MSFT", "TSLA"]))
+        log.info("warm-up finished in %.1fs", time.time() - started)
+    except Exception:  # never let a warm-up problem affect the server
+        log.warning("warm-up skipped")

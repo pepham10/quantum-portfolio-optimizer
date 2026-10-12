@@ -142,3 +142,34 @@ def test_qubo_pick_matches_best_equal_weight_portfolio():
             key=lambda x: (1 - s) * (x / k) @ sg_s @ (x / k) - s * mu_s @ (x / k),
         )
         assert pick == "".join(map(str, best))
+
+# ---------------- start-up warm-up ----------------
+def test_warm_up_fills_the_result_cache(monkeypatch):
+    fake = {t: (time.time(), walk(i)) for i, t in enumerate(["NVDA", "AAPL", "MSFT", "TSLA"])}
+    monkeypatch.setattr(md, "_memory_cache", fake)
+    monkeypatch.setattr(md, "_unknown", {})
+    monkeypatch.setattr(routes, "_results", routes.OrderedDict())
+    routes.warm_up()
+    assert len(routes._results) == 1
+
+
+def test_warm_up_never_raises(monkeypatch):
+    def explode(_req):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(routes, "optimize", explode)
+    monkeypatch.setattr(routes, "_results", routes.OrderedDict())
+    routes.warm_up()  # must swallow the error
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_startup_runs_warm_up_only_when_enabled(monkeypatch, enabled):
+    import threading
+
+    from app.core.config import settings
+
+    called = threading.Event()
+    monkeypatch.setattr(routes, "warm_up", called.set)
+    monkeypatch.setattr(settings, "warmup", enabled)
+    with TestClient(app):
+        assert called.wait(timeout=2) is enabled

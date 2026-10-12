@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,6 +52,7 @@ class PriceData:
 # ticker -> (fetched_at, Series of adjusted closes covering ~2 years)
 _memory_cache: dict[str, tuple[float, pd.Series]] = {}
 _fallback: dict[str, pd.Series] | None = None
+_write_lock = threading.Lock()  # requests run in parallel threads; guard writes to the shared caches
 # symbol -> time we learned Yahoo has no data for it (only recorded when the download itself worked)
 _unknown: dict[str, float] = {}
 
@@ -128,8 +130,9 @@ def get_prices(tickers: list[str], lookback_days: int = 365) -> PriceData:
             log.warning("yfinance download failed: %s", exc)
             fetched = {}
         for t, s in fetched.items():
-            _memory_cache[t] = (now, s)
-            _trim(_memory_cache)
+            with _write_lock:
+                _memory_cache[t] = (now, s)
+                _trim(_memory_cache)
             series[t] = s
             sources.add("live")
 
@@ -144,9 +147,10 @@ def get_prices(tickers: list[str], lookback_days: int = 365) -> PriceData:
     missing = [t for t in tickers if t not in series]
     if missing:
         if download_ok:  # Yahoo answered and these symbols are not in it: remember that for a while
-            for t in missing:
-                _unknown[t] = now
-            _trim(_unknown)
+            with _write_lock:
+                for t in missing:
+                    _unknown[t] = now
+                _trim(_unknown)
         raise TickerNotFoundError(f"No price data found for: {', '.join(missing)}")
 
     prices = pd.DataFrame({t: series[t] for t in tickers})

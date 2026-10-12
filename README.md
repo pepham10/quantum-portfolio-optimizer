@@ -200,7 +200,7 @@ This is a local, stateless demo (no accounts, no database, no secrets), so the s
 - **Errors:** unexpected failures return a generic message; details stay in the server log.
 - **Browser protections:** CORS only allows the local web app by default (`ALLOWED_ORIGINS` in `backend/.env`), plus `nosniff`, `X-Frame-Options: DENY`, `no-referrer` and `no-store` headers on API responses. The circuit diagram SVG is sanitized on the server before the page inserts it.
 - **Network:** `uvicorn` binds to `localhost` by default. For phone testing, use `npm run dev -- --host` (the web server forwards API calls), not `--host 0.0.0.0` on the backend.
-- **Dependencies:** pinned in `backend/requirements.txt`; `pip-audit` and `npm audit` report no known vulnerabilities.
+- **Dependencies:** backend and `web/` packages are pinned or locked; `pip-audit` and `npm audit` report no known vulnerabilities for them. (`mobile/` is an unused starter and has not been audited.)
 
 ## Tests
 
