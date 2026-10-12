@@ -52,6 +52,8 @@ Vite prints a `Network:` address (like `http://192.168.x.x:5173`). Open it in yo
 
 The first request after a cold start takes a few seconds (Qiskit import, price download, one-time matplotlib font cache). After that, a run takes under 1 second.
 
+**Start-up animation:** the page plays a short intro animation the first time it opens in a browser tab. Click or press any key to skip it. To replay it, add `?intro` to the address (for example `http://localhost:5173/?intro`) or open a new tab.
+
 ---
 
 ## What the app shows
