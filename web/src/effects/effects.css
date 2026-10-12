@@ -73,3 +73,34 @@ html.fx .section[data-seen]::before { transform: scaleX(1); transition: transfor
 @keyframes fx-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes fx-grow { to { transform: scaleX(1); } }
 @keyframes fx-spin { to { transform: rotate(360deg); } }
+
+/* ================= second pass ================= */
+
+/* numbers wait (invisible) until they start counting */
+html.fx [data-count]:not([data-counted]) { opacity: 0; }
+html.fx [data-count][data-counted] { transition: opacity 0.35s var(--ease-out); }
+
+/* charts wipe in from the left when their block scrolls into view (negative insets keep tooltips from being clipped) */
+html.fx [data-reveal]:not([data-revealed]) .recharts-wrapper { clip-path: inset(-80px 100% -80px -80px); }
+html.fx [data-reveal][data-revealed] .recharts-wrapper { clip-path: inset(-80px); transition: clip-path 1.6s var(--ease-out) 0.35s; }
+
+/* hero rings drift slower than the page as you scroll */
+.intro::before { transform: translateY(calc(var(--sy, 0) * 0.14px)); }
+
+/* cards: border warms up and a soft teal light follows the pointer */
+@media (hover: hover) {
+  .panel, .mini-figure, .vision > div { transition: border-color 0.3s var(--ease-out); }
+  .panel:hover, .mini-figure:hover, .vision > div:hover {
+    border-color: color-mix(in oklab, var(--color-quantum) 40%, var(--color-rule));
+    background-image: radial-gradient(440px circle at var(--mx, 50%) var(--my, 50%), color-mix(in oklab, var(--color-quantum) 10%, transparent), transparent 62%);
+  }
+}
+
+/* Run button: glow on hover, and a gentle pulse while the results are out of date with the settings */
+.btn-primary { transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), box-shadow 0.3s var(--ease-out); }
+.btn-primary:hover:not(:disabled) { box-shadow: 0 8px 30px -8px color-mix(in oklab, var(--color-quantum) 75%, transparent); }
+html:has(.stale) .btn-primary:not(:disabled) { animation: fx-pulse 2.2s var(--ease-in-out) infinite; }
+@keyframes fx-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-quantum) 55%, transparent); }
+  60% { box-shadow: 0 0 0 12px transparent; }
+}
